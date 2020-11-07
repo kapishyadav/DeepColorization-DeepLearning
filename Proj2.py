@@ -4,15 +4,15 @@ import os
 import torch
 import numpy as np
 from torchvision import transforms
+from torchsummary import summary
 from torch.utils.data import DataLoader
 import matplotlib.pyplot as plt
 
 from ConvNet import ConvNet
 
-#SET SEED!!!!
-
-torch.set_default_tensor_type('torch.FloatTensor')
-
+torch.manual_seed(0)
+# torch.set_default_tensor_type('torch.FloatTensor')
+torch.set_default_tensor_type('torch.DoubleTensor')
 
 def scale_transform(image):
 	rand = np.random.uniform(low = 0.6, high = 1.0)
@@ -27,14 +27,9 @@ def show_image(image):
 	switched = [2,1,0]
 	image = image[:,:,switched]
 	imgplot = plt.imshow(image)
-	
+
 	plt.show()
 	print("Image displayed")
-	
-
-
-
-
 
 #750 images. 750 x 3 x 128 x 128
 NumImages = 750
@@ -47,141 +42,114 @@ for file in glob.glob('face_images/*.jpg'):
 	data[c, :, :, :] = img
 	c = c + 1
 
-
-
 RandomIndices = torch.randperm(NumImages)
 data = data[RandomIndices, :, :, :]
 
 
-# test train split
+### test train split ###
 NumTrainImages = 675
 NumTestImages = 75
 
 train = data[:675, :, :, :]
 test = data[675:, :, :, :]
 
-#data aug
+### data aug ###
 trainset = torch.empty(NumTrainImages*10, 3, 128, 128)
 trainset[:675, :, :, :] = data[:675, :, :, :]
 # horizontal_flip
 
 horizontal_transform = transforms.Compose([
-	    #transforms.ToPILImage(), 
+	    #transforms.ToPILImage(),
 	    transforms.RandomHorizontalFlip(p=1.0),
 	    #transforms.ToTensor()
 	])
 c = 0
 for i in np.arange(NumTrainImages, 4*NumTrainImages, 3):
-	
+
 	trainset[i, :, :, :] = horizontal_transform(data[c, :, :, :])
 	trainset[i+1, :, :, :] = horizontal_transform(data[c, :, :, :])
 	trainset[i+2, :, :, :] = horizontal_transform(data[c, :, :, :])
 	c = c + 1
 
 crop_transform = transforms.Compose([
-	    #transforms.ToPILImage(), 
+	    #transforms.ToPILImage(),
 	    transforms.RandomResizedCrop(128,scale = (0.5,1.0),ratio = (1.0,1.0)),
 	    #transforms.ToTensor()
 	])
 
 c = 0
 for i in np.arange(4*NumTrainImages, 7*NumTrainImages, 3):
-	
+
 	trainset[i, :, :, :] = crop_transform(data[c, :, :, :])
 	trainset[i+1, :, :, :] = crop_transform(data[c, :, :, :])
 	trainset[i+2, :, :, :] = crop_transform(data[c, :, :, :])
 	c = c + 1
 
-
-
-
-
 c = 0
 for i in np.arange(7*NumTrainImages, 10*NumTrainImages, 3):
-	
+
 	trainset[i, :, :, :] = scale_transform(torch.squeeze(data[c, :, :, :]))
 	trainset[i+1, :, :, :] = scale_transform(torch.squeeze(data[c, :, :, :]))
 	trainset[i+2, :, :, :] = scale_transform(torch.squeeze(data[c, :, :, :]))
 	c = c + 1
-
 # show_image(trainset[1,:,:,:])
 # show_image(torch.squeeze(trainset[678,:,:,:]))
 # show_image(torch.squeeze(trainset[6749,:,:,:]))
 # show_image(torch.squeeze(trainset[4700,:,:,:]))
 
+### Convert from RGB to LAB ###
 trainset_lab = np.zeros((NumTrainImages*10, 128,128,3))
-
-
 for i in range(0,NumTrainImages*10):
-	# 
 	trainset_img = torch.squeeze(trainset[i,:,:,:])
 	trainset_img = trainset_img.permute(1, 2, 0)
-	# import pdb; pdb.set_trace()
 	trainset_lab[i,:,:,:] = cv2.cvtColor(np.float32(trainset_img.numpy()), cv2.COLOR_BGR2LAB)
 
-	# L, a, b = cv2.split(trainset_lab)
+### Convert LAB to data & labels ###
+trainset_lab = torch.from_numpy(trainset_lab)
+L_channel = np.zeros((NumTrainImages*10, 1, 128, 128))
+a_channel = np.zeros((NumTrainImages*10, 1, 128, 128))
+b_channel = np.zeros((NumTrainImages*10, 1, 128, 128))
+
+for i in range(0, 15):#NumTrainImages*10):
+	temp_squeezed_img = torch.squeeze(trainset_lab[i,:,:,:]) #[1,128,128,3] -> [128,128,3]
+
+	#Split LAB channels into their own variables
+	L_channel[i,:,:,:], a_channel[i,:,:,:], b_channel[i,:,:,:] = cv2.split(np.float32(temp_squeezed_img))
+
+	#Normalize L channel from [0,100] -> [0,1]
+	L_channel[i,:,:,:] = L_channel[i,:,:,:]/100.0
+
+#Convert to torch
+L_channel = torch.from_numpy(L_channel)
+
+#Get average of a and b channel for ground truth (want to predict average of a and b channels)
+for i in range(0, NumTrainImages*10):
+	a_b_average = np.zeros((NumTrainImages*10, 2, 1, 1))
+	a_b_average[i,0,:,:] = np.mean(a_channel[i,:,:,:]) #a average
+	a_b_average[i,1,:,:] = np.mean(b_channel[i,:,:,:]) #b average
+a_b_average = torch.from_numpy(a_b_average)
 
 # Linear Regressor
-
-def LR_ModelDef():
-	ConvModel = ConvNet()
-
-	optimizer = torch.optim.Adam(ConvModel.parameters(), lr=0.07)
-
-	loss = torch.nn.MSELoss()
-
-	if torch.cuda.is_available():
-		ConvModel = ConvModel.cuda()
-		loss = loss.cuda()
-
-	return ConvModel
-
-def train_LR(trainset_lab, ConvModel, epochs):
-	trainset_lab = torch.from_numpy(trainset_lab)
-	L_channel = np.zeros((NumTrainImages*10, 1, 128, 128))
-	a_channel = np.zeros((NumTrainImages*10, 1, 128, 128))
-	b_channel = np.zeros((NumTrainImages*10, 1, 128, 128))
-
+def train_LR(ConvModel, optimizer, loss, epochs):
 	# if torch.cuda.is_available():
 	# 	L_channel = L_channel.cuda()
 	# 	a_channel = a_channel.cuda()
 	# 	b_channel = b_channel.cuda()
 	# 	trainset_lab = trainset_lab.cuda()
 
-	for i in range(0, NumTrainImages*10):
-		trainset_lab = torch.squeeze(trainset_lab[i,:,:,:])
-		trainset_lab = trainset_lab.permute(2,0,1)
-		L_channel[i,:,:,:], a_channel[i,:,:,:], b_channel[i,:,:,:] = cv2.split(np.float32(trainset_lab))
-
-		
-		L_channel[i,:,:,:] = L_channel[i,:,:,:]/100.0
-
 	optimizer.zero_grad()
+	pred = ConvModel(L_channel[0:5,:,:,:])
 
-	pred = model(L_channel)
+	predError = loss(pred, a_b_average[0:5,:,:,:])
 	import pdb; pdb.set_trace()
 	return pred
 
+ConvModel = ConvNet()
+optimizer = torch.optim.Adam(ConvModel.parameters(), lr=0.07)
+loss      = torch.nn.MSELoss()
 
-model = LR_ModelDef()
-pred = train_LR(trainset_lab, model, 5)
+if torch.cuda.is_available():
+	ConvModel = ConvModel.cuda()
+	loss = loss.cuda()
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+pred = train_LR(ConvModel, optimizer, loss, 5)
