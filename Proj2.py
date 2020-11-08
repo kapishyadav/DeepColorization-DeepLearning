@@ -155,7 +155,6 @@ def train_Reg(ConvModel, optimizer, loss, L_channel, a_b_average):
 	print("Loss: " ,tr_loss)
 	train_loss.append(tr_loss)
 
-
 ConvModel = ConvNet()
 optimizer = torch.optim.Adam(ConvModel.parameters(), lr=0.01)
 loss      = torch.nn.MSELoss()
@@ -165,9 +164,7 @@ if torch.cuda.is_available():
 	loss = loss.cuda()
 
 train_loss = []
-
 epochs  = 100
-
 
 for i in range(0, epochs):
 	print("epoch: ", i+1 )
