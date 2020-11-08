@@ -3,6 +3,7 @@ import torch
 from torch.autograd import Variable
 from torch.nn import Linear, ReLU, CrossEntropyLoss, Sequential, Conv2d, MaxPool2d, Module, Softmax, BatchNorm2d, Dropout
 from torch.optim import Adam, SGD
+from torch import tanh
 
 
 class ConvNet(Module):
@@ -35,7 +36,7 @@ class ConvNet(Module):
 
         # Defining another 2D convolution layer 2*2
         self.conv7 = Conv2d(3, 2, kernel_size=2, stride=1)
-        self.relu7 = ReLU(inplace=True)
+        self.tanh = torch.nn.Tanh()
 
 
     # Defining the forward pass
@@ -47,5 +48,5 @@ class ConvNet(Module):
         x4 = self.relu4(self.conv4(x3))
         x5 = self.relu5(self.conv5(x4))
         x6 = self.relu6(self.conv6(x5))
-        x7 = self.relu7(self.conv7(x6))
+        x7 = self.tanh(self.conv7(x6))
         return x7
