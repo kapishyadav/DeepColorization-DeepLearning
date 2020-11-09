@@ -7,12 +7,16 @@ from torchvision import transforms
 from torch.utils.data import DataLoader
 import matplotlib.pyplot as plt
 from sklearn.metrics import accuracy_score
+from skimage.color import rgb2lab, lab2rgb
+from skimage import io
+from skimage import data
+from skimage.viewer import ImageViewer
 
 from ColorNet import ColorNet
 
 #Boolean, true if you have a trained model to load.
-loadModel = False
-ModelPath = 'Model/ColorNet.pt'
+loadModel = True
+ModelPath = 'Model/ColorNetHuge.pt'
 
 if torch.cuda.is_available():
     map_location=lambda storage, loc: storage.cuda()
@@ -34,10 +38,7 @@ def scale_transform(image):
 def show_image(image):
 	image = np.uint8(torch.squeeze(image.permute(1, 2, 0)))
 	# import pdb; pdb.set_trace()
-	switched = [2,1,0]
-	image = image[:,:,switched]
 	imgplot = plt.imshow(image)
-
 	plt.show()
 	print("Image displayed")
 
@@ -47,9 +48,11 @@ NumImages = 750
 data = torch.empty(NumImages, 3, 128, 128)
 c = 0
 for file in glob.glob('face_images/*.jpg'):
-	img = cv2.imread(file) #B, G, R
+	img = io.imread(file) #R G B
+	#import pdb; pdb.set_trace()
 	img = torch.from_numpy(np.asarray(img))
-	img = img.permute(2, 0, 1)
+	img = img.permute(2, 0, 1) # C *H * W
+	
 	data[c, :, :, :] = img
 	c = c + 1
 
@@ -109,19 +112,21 @@ for i in np.arange(7*NumTrainImages, 10*NumTrainImages, 3):
 # show_image(torch.squeeze(trainset[4700,:,:,:]))
 
 ### Convert from RGB to LAB for TRAIN SET ###
+
 trainset_LAB = np.zeros((NumTrainImages*10, 128,128,3))
 for i in range(0,NumTrainImages*10):
+	#import pdb; pdb.set_trace()
 	trainset_img = torch.squeeze(trainset[i,:,:,:])
 	trainset_img = trainset_img.permute(1, 2, 0)
-	trainset_LAB[i,:,:,:] = cv2.cvtColor(np.float32(trainset_img.numpy()), cv2.COLOR_BGR2LAB)
+	trainset_LAB[i,:,:,:] = rgb2lab(trainset_img/255.0)
 
 ### Convert from RGB to LAB for TEST SET ###
 testset_LAB = np.zeros((NumTestImages, 128,128,3))
 
 for i in range(NumTestImages):
-	testset_img = torch.squeeze(test[i,:,:,:])
+	testset_img = torch.squeeze(test[i,:,:,:]) # 128*128*3
 	testset_img = testset_img.permute(1, 2, 0)
-	testset_LAB[i,:,:,:] = cv2.cvtColor(np.float32(testset_img.numpy()), cv2.COLOR_BGR2LAB)
+	testset_LAB[i,:,:,:] = rgb2lab(testset_img/255.0)
 
 ### Convert LAB to data & labels FOR TRAIN SET ###
 trainset_LAB          = torch.from_numpy(trainset_LAB)
@@ -130,15 +135,17 @@ trainset_a_b_channels = np.zeros((NumTrainImages*10, 2, 128, 128))
 a_channel = np.zeros((NumTrainImages*10, 1, 128, 128))
 b_channel = np.zeros((NumTrainImages*10, 1, 128, 128))
 for i in range(0, NumTrainImages*10):
+	# import pdb; pdb.set_trace()
 	temp_squeezed_img = torch.squeeze(trainset_LAB[i,:,:,:]) #[1,128,128,3] -> [128,128,3]
 
 	#Split LAB channels into their own variables
 	# trainset_L_channel[i,:,:,:], a_channel[i,:,:,:], b_channel[i,:,:,:] = cv2.split(np.float32(temp_squeezed_img))
-	trainset_L_channel[i,:,:,:] = temp_squeezed_img[0,:,:]
-	a_channel[i,:,:,:] = temp_squeezed_img[1,:,:]
-	b_channel[i,:,:,:] = temp_squeezed_img[2,:,:]
 
+	trainset_L_channel[i,:,:,:] = temp_squeezed_img[:,:,0]
+	a_channel[i,:,:,:] = temp_squeezed_img[:,:,1]
+	b_channel[i,:,:,:] = temp_squeezed_img[:,:,2]
 
+	#import pdb; pdb.set_trace()
 	#Normalize L channel from [0,100] -> [0,1]
 	trainset_L_channel[i,:,:,:] = trainset_L_channel[i,:,:,:]/100.0
 	#Normalize a channel from [-110,110] -> [-1,1]
@@ -160,7 +167,11 @@ for i in range(0, NumTestImages):
 	temp_squeezed_img = torch.squeeze(testset_LAB[i,:,:,:]) #[1,128,128,3] -> [128,128,3]
 
 	#Split LAB channels into their own variables
-	testset_L_channel[i,:,:,:], a_channel[i,:,:,:], b_channel[i,:,:,:] = cv2.split(np.float32(temp_squeezed_img))
+	# testset_L_channel[i,:,:,:], a_channel[i,:,:,:], b_channel[i,:,:,:] = cv2.split(np.float32(temp_squeezed_img))
+
+	testset_L_channel[i,:,:,:] = temp_squeezed_img[:,:,0]
+	a_channel[i,:,:,:] = temp_squeezed_img[:,:,1]
+	b_channel[i,:,:,:] = temp_squeezed_img[:,:,2]
 
 	#Normalize L channel from [0,100] -> [0,1]
 	testset_L_channel[i,:,:,:] = testset_L_channel[i,:,:,:]/100.0
@@ -254,19 +265,26 @@ testset_a_b_channels = testset_a_b_channels.cpu()
 
 test_RGB = np.zeros((NumTestImages,128,128,3))
 for i in range(NumTestImages):
-    #un-normalize L channel from [0,1] -> [0,100]
+	#un-normalize L channel from [0,1] -> [0,100]
 	L_channel_squeeze = testset_L_channel[i,:,:,:]*100.0
-    #un-normalize a and b channel from [-1,1] -> [-110,110]
+	#un-normalize a and b channel from [-1,1] -> [-110,110]
 	a_channel = torch.unsqueeze(pred[i,0,:,:], 0)*127.0
 	b_channel = torch.unsqueeze(pred[i,1,:,:], 0)*127.0
 
-	test_merge = np.concatenate((np.float32(L_channel_squeeze.numpy()),
-		np.float32(a_channel.numpy()),
-		np.float32(b_channel.numpy())))
-	import pdb; pdb.set_trace()
+	test_merge = np.stack((L_channel_squeeze.numpy(),
+		a_channel.numpy(),
+		b_channel.numpy()), axis =0)*255.0
+	test_merge = np.transpose(np.uint8(test_merge[:,0,:,:]), (1,2,0))
+	# plt.show()
 	# test_BGR = cv2.cvtColor(test_merge, cv2.COLOR_LAB2BGR)
-	test_RGB[i,:,:,:] = cv2.cvtColor(np.transpose(test_merge, (1,2,0)), cv2.COLOR_LAB2RGB)
+	test_RGB[i,:,:,:] = lab2rgb(test_merge)
+	# plt.imshow(test_RGB[0,:,:,:])
+	# plt.show()
+	import pdb; pdb.set_trace()
+
+	
 	# test_RGB[i,:,:,:] = test_BGR.permute(2, 1, 0
 
 # for i range(NumTestImages):
 # 	plt.savefig(""test_RGB[i,:,:,:])
+
