@@ -11,8 +11,8 @@ from sklearn.metrics import accuracy_score
 from ColorNet import ColorNet
 
 #Boolean, true if you have a trained model to load.
-loadModel = False
-ModelPath = '/Users/nkroeger/Documents/UF_Grad/2020\ Fall/DL4CG/Part2/DeepColorization'
+loadModel = True
+ModelPath = 'C:/Users/kapis/OneDrive/Documents/GitHub/DeepColorization/Model/ColorNet.pt'
 
 torch.manual_seed(0)
 # torch.set_default_tensor_type('torch.FloatTensor')
@@ -110,15 +110,19 @@ for i in range(0,NumTrainImages*10):
 	trainset_LAB[i,:,:,:] = cv2.cvtColor(np.float32(trainset_img.numpy()), cv2.COLOR_BGR2LAB)
 
 ### Convert from RGB to LAB for TEST SET ###
+testset_LAB = np.zeros((NumTestImages, 128,128,3))
+
 for i in range(NumTestImages):
-    testset_img = torch.squeeze(test[i,:,:,:])
-    testset_img = testset_img.permute(1, 2, 0)
-    testset_LAB[i,:,:,:] = cv2.cvtColor(np.float32(testset_img.numpy()), cv2.COLOR_BGR2LAB)
+	testset_img = torch.squeeze(test[i,:,:,:])
+	testset_img = testset_img.permute(1, 2, 0)
+	testset_LAB[i,:,:,:] = cv2.cvtColor(np.float32(testset_img.numpy()), cv2.COLOR_BGR2LAB)
 
 ### Convert LAB to data & labels FOR TRAIN SET ###
 trainset_LAB          = torch.from_numpy(trainset_LAB)
 trainset_L_channel    = np.zeros((NumTrainImages*10, 1, 128, 128))
 trainset_a_b_channels = np.zeros((NumTrainImages*10, 2, 128, 128))
+a_channel = np.zeros((NumTrainImages*10, 1, 128, 128))
+b_channel = np.zeros((NumTrainImages*10, 1, 128, 128))
 for i in range(0, NumTrainImages*10):
 	temp_squeezed_img = torch.squeeze(trainset_LAB[i,:,:,:]) #[1,128,128,3] -> [128,128,3]
 
@@ -140,6 +144,8 @@ trainset_a_b_channels = torch.from_numpy(trainset_a_b_channels)
 testset_LAB          = torch.from_numpy(testset_LAB)
 testset_L_channel    = np.zeros((NumTestImages, 1, 128, 128))
 testset_a_b_channels = np.zeros((NumTestImages, 2, 128, 128))
+a_channel = np.zeros((NumTestImages, 1, 128, 128))
+b_channel = np.zeros((NumTestImages, 1, 128, 128))
 for i in range(0, NumTestImages):
 	temp_squeezed_img = torch.squeeze(testset_LAB[i,:,:,:]) #[1,128,128,3] -> [128,128,3]
 
@@ -166,15 +172,14 @@ def train_Colorizer(ColorModel, optimizer, loss, L_channel, a_b_channels):
 		a_b_channels = a_b_channels.cuda()
 
 	optimizer.zero_grad()
-	pred = ColorNet(L_channel)
+	pred = ColorModel(L_channel)
 
 	predError = loss(pred, a_b_channels)
 	predError.backward()
 	optimizer.step()
 
 	tr_loss = predError.item()
-	print("Loss: " ,tr_loss)
-	train_loss.append(tr_loss)
+	train_loss_batch.append(tr_loss)
 
 ColorModel = ColorNet()
 optimizer  = torch.optim.Adam(ColorModel.parameters(), lr=0.01)
@@ -184,43 +189,75 @@ if torch.cuda.is_available():
 	ColorModel = ColorModel.cuda()
 	loss = loss.cuda()
 
-train_loss = []
-epochs  = 100
+
+train_loss_batch = []
+epochs  = 15
 BatchSize = 10
 #Train over several epochs
-for i in range(0, epochs):
-	print("epoch: ", i+1 )
-    #Get batches of size: BatchSize
-    for i in np.arange(0, NumTrainImages*10, BatchSize):
-        L_channel_batch    = trainset_L_channel[i:(i+10), :, :, :]
-        a_b_channels_batch = trainset_a_b_channels[i:(i+10), :, :, :]
-        train_Colorizer(ColorModel, optimizer, loss, L_channel_batch, a_b_channels_batch)
+if loadModel==False:
+	for i in range(0, epochs):
+		train_loss_epoch= []
+		print("epoch: ", i+1 )
+		#Get batches of size: BatchSize
+		for i in np.arange(0, NumTrainImages*10, BatchSize):
+			L_channel_batch    = trainset_L_channel[i:(i+10), :, :, :]
+			a_b_channels_batch = trainset_a_b_channels[i:(i+10), :, :, :]
+			train_Colorizer(ColorModel, optimizer, loss, L_channel_batch, a_b_channels_batch)
+		train_loss_epoch.append(np.mean(train_loss_batch))
+		print("Train loss: ", np.mean(train_loss_batch))
 
-#Plot training error
-plt.plot(train_loss)
-plt.ylabel("Train error")
-plt.xlabel("Epochs")
-plt.savefig("Colorizer_Loss.png")
+
+	#Plot training error
+	plt.plot(train_loss_epoch)
+	plt.ylabel("Train error")
+	plt.xlabel("Epochs")
+	plt.savefig("Colorizer_Loss.png")
 
 ###
 #Save the model
-torch.save(ColorModel.state_dict(), ModelPath)
+torch.save(ColorModel, ModelPath)
 
 #Load model
 if loadModel == True:
-    ColorModel = ColorNet()
-    ColorModel.torch.load(ModelPath)
+	print("Loading model ...")
+	ColorModel = torch.load(ModelPath)
 
 ###
 #Prediction on test set
 ColorModel.eval() #Since we have batchnorm layers
 with torch.no_grad(): #Don't update the weights
-    if torch.cuda.is_available():
-        testset_L_channel = testset_L_channel.cuda()
-    pred = model(testset_L_channel)
+	if torch.cuda.is_available():
+		testset_L_channel = testset_L_channel.cuda()
+		testset_a_b_channels = testset_a_b_channels.cuda()
+	pred = ColorModel(testset_L_channel)
 
 # test set loss
+
 testSetLoss = loss(pred, testset_a_b_channels)
+print("Test Set Loss: " , testSetLoss.item())
 
 
-# Merge LAB channels, ronvert to RGB and visualize
+# Merge LAB channels, convert to RGB and visualize
+testset_L_channel = testset_L_channel.cpu()
+pred = pred.cpu()
+testset_a_b_channels = testset_a_b_channels.cpu()
+
+test_RGB = np.zeros((NumTestImages,128,128,3))
+for i in range(NumTestImages):
+	L_channel_squeeze = testset_L_channel[i,:,:,:]
+	a_channel = torch.unsqueeze(pred[i,0,:,:], 0)
+	b_channel = torch.unsqueeze(pred[i,1,:,:], 0)
+	test_merge = np.concatenate((np.float32(L_channel_squeeze.numpy()),
+		np.float32(a_channel.numpy()), 
+		np.float32(b_channel.numpy())))
+	import pdb; pdb.set_trace()
+	# test_BGR = cv2.cvtColor(test_merge, cv2.COLOR_LAB2BGR)
+	test_RGB[i,:,:,:] = cv2.cvtColor(np.transpose(test_merge, (1,2,0)), cv2.COLOR_LAB2RGB)
+	# test_RGB[i,:,:,:] = test_BGR.permute(2, 1, 0
+
+# for i range(NumTestImages):
+# 	plt.savefig(""test_RGB[i,:,:,:])
+
+
+
+

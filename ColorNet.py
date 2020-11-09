@@ -1,7 +1,7 @@
 # PyTorch libraries and modules
 import torch
 from torch.autograd import Variable
-from torch.nn import Linear, ReLU, CrossEntropyLoss, Sequential, Conv2d, MaxPool2d, Module, Softmax, BatchNorm2d, Dropout, UpsamplingNearest2d, BatchNorm2d
+from torch.nn import Linear, ReLU, CrossEntropyLoss, ConvTranspose2d, Sequential, Conv2d, MaxPool2d, Module, Softmax, BatchNorm2d, Dropout, UpsamplingNearest2d, BatchNorm2d
 from torch.optim import Adam, SGD
 from torch import tanh
 
@@ -35,37 +35,32 @@ class ColorNet(Module):
         self.relu5  = ReLU(inplace=True)
         self.batch5 = BatchNorm2d(num_features = 3)
 
-        # Defining another 2D convolution layer 4*4
-        self.conv6  = Conv2d(3, 3, kernel_size=2, stride=2)
-        self.relu6  = ReLU(inplace=True)
-        self.batch6 = BatchNorm2d(num_features = 3)
-
         # UPSAMPLE
 
         # 4x4 -> 8x8
-        self.upSample1 = UpsamplingNearest2d(scale_factor = 2)
+        self.upSample1 = ConvTranspose2d(in_channels=3, out_channels=3, kernel_size = 2, stride = 2, padding = 0)
         self.uprelu1   = ReLU(inplace=True)
         self.upbatch1  = BatchNorm2d(num_features = 3)
 
         #8x8 -> 16x16
-        self.upSample2 = UpsamplingNearest2d(scale_factor = 2)
+        self.upSample2 = ConvTranspose2d(in_channels=3, out_channels=3, kernel_size = 2, stride = 2, padding = 0)
         self.uprelu2   = ReLU(inplace=True)
         self.upbatch2  = BatchNorm2d(num_features = 3)
 
         #16x16 -> 32 x 32
-        self.upSample3 = UpsamplingNearest2d(scale_factor = 2)
+        self.upSample3 = ConvTranspose2d(in_channels=3, out_channels=3, kernel_size = 2, stride = 2, padding = 0)
         self.uprelu3   = ReLU(inplace=True)
         self.upbatch3  = BatchNorm2d(num_features = 3)
 
         #32x32 -> 64x64
-        self.upSample4 = UpsamplingNearest2d(scale_factor = 2)
+        self.upSample4 = ConvTranspose2d(in_channels=3, out_channels=3, kernel_size = 2, stride = 2, padding = 0)
         self.uprelu4   = ReLU(inplace=True)
         self.upbatch4  = BatchNorm2d(num_features = 3)
 
         #64x64 -> 128x128
-        self.upSample5 = UpsamplingNearest2d(scale_factor = 2)
+        self.upSample5 = ConvTranspose2d(in_channels=3, out_channels=2, kernel_size = 2, stride = 2, padding = 0)
         self.uprelu5   = ReLU(inplace=True)
-        self.upbatch5  = BatchNorm2d(num_features = 3)
+        self.upbatch5  = BatchNorm2d(num_features = 2)
 
 
     # Defining the forward pass
@@ -76,11 +71,9 @@ class ColorNet(Module):
         x3 = self.batch3(self.relu3(self.conv3(x2)))
         x4 = self.batch4(self.relu4(self.conv4(x3)))
         x5 = self.batch5(self.relu5(self.conv5(x4)))
-        x6 = self.batch6(self.relu6(self.conv6(x5)))
-        u1 = self.upbatch1(self.uprelu1(self.upSample1(x6)))
+        u1 = self.upbatch1(self.uprelu1(self.upSample1(x5)))
         u2 = self.upbatch2(self.uprelu2(self.upSample2(u1)))
         u3 = self.upbatch3(self.uprelu3(self.upSample3(u2)))
         u4 = self.upbatch4(self.uprelu4(self.upSample4(u3)))
         u5 = self.upbatch5(self.uprelu5(self.upSample5(u4)))
-
         return u5
