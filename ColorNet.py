@@ -50,7 +50,7 @@ class ColorNet(Module):
         #16x16 -> 32 x 32
         self.upSample3 = ConvTranspose2d(in_channels=3, out_channels=3, kernel_size = 2, stride = 2, padding = 0)
         self.upbatch3  = BatchNorm2d(num_features = 3)
-        self.uprelu4   = ReLU(inplace=True)
+        self.uprelu3   = ReLU(inplace=True)
 
         #32x32 -> 64x64
         self.upSample4 = ConvTranspose2d(in_channels=3, out_channels=3, kernel_size = 2, stride = 2, padding = 0)
