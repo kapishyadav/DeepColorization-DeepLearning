@@ -12,7 +12,13 @@ from ColorNet import ColorNet
 
 #Boolean, true if you have a trained model to load.
 loadModel = True
-ModelPath = 'C:/Users/kapis/OneDrive/Documents/GitHub/DeepColorization/Model/ColorNet.pt'
+ModelPath = 'Model/ColorNet.pt'
+
+if torch.cuda.is_available():
+    map_location=lambda storage, loc: storage.cuda()
+else:
+    map_location='cpu'
+
 
 torch.manual_seed(0)
 # torch.set_default_tensor_type('torch.FloatTensor')
@@ -220,7 +226,7 @@ torch.save(ColorModel, ModelPath)
 #Load model
 if loadModel == True:
 	print("Loading model ...")
-	ColorModel = torch.load(ModelPath)
+	ColorModel = torch.load(ModelPath, map_location=map_location)
 
 ###
 #Prediction on test set
@@ -232,11 +238,11 @@ with torch.no_grad(): #Don't update the weights
 	pred = ColorModel(testset_L_channel)
 
 # test set loss
-
 testSetLoss = loss(pred, testset_a_b_channels)
 print("Test Set Loss: " , testSetLoss.item())
 
-
+###
+#Visualize images
 # Merge LAB channels, convert to RGB and visualize
 testset_L_channel = testset_L_channel.cpu()
 pred = pred.cpu()
@@ -244,11 +250,20 @@ testset_a_b_channels = testset_a_b_channels.cpu()
 
 test_RGB = np.zeros((NumTestImages,128,128,3))
 for i in range(NumTestImages):
-	L_channel_squeeze = testset_L_channel[i,:,:,:]
-	a_channel = torch.unsqueeze(pred[i,0,:,:], 0)
-	b_channel = torch.unsqueeze(pred[i,1,:,:], 0)
+    	#Normalize L channel from [0,100] -> [0,1]
+    	testset_a_b_channels[i,:,:,:] = testset_L_channel[i,:,:,:]/100.0
+    	#Normalize a channel from [-110,110] -> [-1,1]
+    	testset_a_b_channels[i,0,:,:] = (2.0*(a_channel[i,:,:,:] + 110.0)/220.0) - 1.0
+    	#Normalize b channel from [-110,110] -> [-1,1]
+    	testset_a_b_channels[i,1,:,:] = (2.0*(b_channel[i,:,:,:] + 110.0)/220.0) - 1.0
+    #un-normalize L channel from [0,1] -> [0,100]
+	L_channel_squeeze = testset_L_channel[i,:,:,:]*100.0
+    #un-normalize a and b channel from [-1,1] -> [-110,110]
+	a_channel = torch.unsqueeze(pred[i,0,:,:], 0)*110.0
+	b_channel = torch.unsqueeze(pred[i,1,:,:], 0)*110.0
+
 	test_merge = np.concatenate((np.float32(L_channel_squeeze.numpy()),
-		np.float32(a_channel.numpy()), 
+		np.float32(a_channel.numpy()),
 		np.float32(b_channel.numpy())))
 	import pdb; pdb.set_trace()
 	# test_BGR = cv2.cvtColor(test_merge, cv2.COLOR_LAB2BGR)
@@ -257,7 +272,3 @@ for i in range(NumTestImages):
 
 # for i range(NumTestImages):
 # 	plt.savefig(""test_RGB[i,:,:,:])
-
-
-
-
