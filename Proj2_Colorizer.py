@@ -133,14 +133,18 @@ for i in range(0, NumTrainImages*10):
 	temp_squeezed_img = torch.squeeze(trainset_LAB[i,:,:,:]) #[1,128,128,3] -> [128,128,3]
 
 	#Split LAB channels into their own variables
-	trainset_L_channel[i,:,:,:], a_channel[i,:,:,:], b_channel[i,:,:,:] = cv2.split(np.float32(temp_squeezed_img))
+	# trainset_L_channel[i,:,:,:], a_channel[i,:,:,:], b_channel[i,:,:,:] = cv2.split(np.float32(temp_squeezed_img))
+	trainset_L_channel[i,:,:,:] = temp_squeezed_img[0,:,:]
+	a_channel[i,:,:,:] = temp_squeezed_img[1,:,:]
+	b_channel[i,:,:,:] = temp_squeezed_img[2,:,:]
+
 
 	#Normalize L channel from [0,100] -> [0,1]
 	trainset_L_channel[i,:,:,:] = trainset_L_channel[i,:,:,:]/100.0
 	#Normalize a channel from [-110,110] -> [-1,1]
-	trainset_a_b_channels[i,0,:,:] = (2.0*(a_channel[i,:,:,:] + 110.0)/220.0) - 1.0
+	trainset_a_b_channels[i,0,:,:] = (2.0*(a_channel[i,:,:,:] + 127.0)/254.0) - 1.0
 	#Normalize b channel from [-110,110] -> [-1,1]
-	trainset_a_b_channels[i,1,:,:] = (2.0*(b_channel[i,:,:,:] + 110.0)/220.0) - 1.0
+	trainset_a_b_channels[i,1,:,:] = (2.0*(b_channel[i,:,:,:] + 127.0)/254.0) - 1.0
 #Convert to torch
 trainset_L_channel    = torch.from_numpy(trainset_L_channel)
 trainset_a_b_channels = torch.from_numpy(trainset_a_b_channels)
@@ -159,11 +163,11 @@ for i in range(0, NumTestImages):
 	testset_L_channel[i,:,:,:], a_channel[i,:,:,:], b_channel[i,:,:,:] = cv2.split(np.float32(temp_squeezed_img))
 
 	#Normalize L channel from [0,100] -> [0,1]
-	testset_a_b_channels[i,:,:,:] = testset_L_channel[i,:,:,:]/100.0
+	testset_L_channel[i,:,:,:] = testset_L_channel[i,:,:,:]/100.0
 	#Normalize a channel from [-110,110] -> [-1,1]
-	testset_a_b_channels[i,0,:,:] = (2.0*(a_channel[i,:,:,:] + 110.0)/220.0) - 1.0
+	testset_a_b_channels[i,0,:,:] = (2.0*(a_channel[i,:,:,:] + 127.0)/254.0) - 1.0
 	#Normalize b channel from [-110,110] -> [-1,1]
-	testset_a_b_channels[i,1,:,:] = (2.0*(b_channel[i,:,:,:] + 110.0)/220.0) - 1.0
+	testset_a_b_channels[i,1,:,:] = (2.0*(b_channel[i,:,:,:] + 127.0)/254.0) - 1.0
 #Convert to torch
 testset_L_channel    = torch.from_numpy(testset_L_channel)
 testset_a_b_channels = torch.from_numpy(testset_a_b_channels)
@@ -179,7 +183,7 @@ def train_Colorizer(ColorModel, optimizer, loss, L_channel, a_b_channels):
 
 	optimizer.zero_grad()
 	pred = ColorModel(L_channel)
-
+	# import pdb; pdb.set_trace()
 	predError = loss(pred, a_b_channels)
 	predError.backward()
 	optimizer.step()
@@ -250,16 +254,16 @@ testset_a_b_channels = testset_a_b_channels.cpu()
 
 test_RGB = np.zeros((NumTestImages,128,128,3))
 for i in range(NumTestImages):
-
+    #un-normalize L channel from [0,1] -> [0,100]
 	L_channel_squeeze = testset_L_channel[i,:,:,:]*100.0
     #un-normalize a and b channel from [-1,1] -> [-110,110]
-	a_channel = torch.unsqueeze(pred[i,0,:,:], 0)*110.0
-	b_channel = torch.unsqueeze(pred[i,1,:,:], 0)*110.0
+	a_channel = torch.unsqueeze(pred[i,0,:,:], 0)*127.0
+	b_channel = torch.unsqueeze(pred[i,1,:,:], 0)*127.0
 
 	test_merge = np.concatenate((np.float32(L_channel_squeeze.numpy()),
 		np.float32(a_channel.numpy()),
 		np.float32(b_channel.numpy())))
-	#import pdb; pdb.set_trace()
+	import pdb; pdb.set_trace()
 	# test_BGR = cv2.cvtColor(test_merge, cv2.COLOR_LAB2BGR)
 	test_RGB[i,:,:,:] = cv2.cvtColor(np.transpose(test_merge, (1,2,0)), cv2.COLOR_LAB2RGB)
 	# test_RGB[i,:,:,:] = test_BGR.permute(2, 1, 0
