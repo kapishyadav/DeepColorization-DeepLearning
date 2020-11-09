@@ -10,7 +10,7 @@ from sklearn.metrics import accuracy_score
 from skimage.color import rgb2lab, lab2rgb
 from skimage import io
 from skimage import data
-from skimage.viewer import ImageViewer
+# from skimage.viewer import ImageViewer
 
 from ColorNet import ColorNet
 
@@ -52,7 +52,7 @@ for file in glob.glob('face_images/*.jpg'):
 	#import pdb; pdb.set_trace()
 	img = torch.from_numpy(np.asarray(img))
 	img = img.permute(2, 0, 1) # C *H * W
-	
+
 	data[c, :, :, :] = img
 	c = c + 1
 
@@ -138,9 +138,6 @@ for i in range(0, NumTrainImages*10):
 	# import pdb; pdb.set_trace()
 	temp_squeezed_img = torch.squeeze(trainset_LAB[i,:,:,:]) #[1,128,128,3] -> [128,128,3]
 
-	#Split LAB channels into their own variables
-	# trainset_L_channel[i,:,:,:], a_channel[i,:,:,:], b_channel[i,:,:,:] = cv2.split(np.float32(temp_squeezed_img))
-
 	trainset_L_channel[i,:,:,:] = temp_squeezed_img[:,:,0]
 	a_channel[i,:,:,:] = temp_squeezed_img[:,:,1]
 	b_channel[i,:,:,:] = temp_squeezed_img[:,:,2]
@@ -165,9 +162,6 @@ a_channel = np.zeros((NumTestImages, 1, 128, 128))
 b_channel = np.zeros((NumTestImages, 1, 128, 128))
 for i in range(0, NumTestImages):
 	temp_squeezed_img = torch.squeeze(testset_LAB[i,:,:,:]) #[1,128,128,3] -> [128,128,3]
-
-	#Split LAB channels into their own variables
-	# testset_L_channel[i,:,:,:], a_channel[i,:,:,:], b_channel[i,:,:,:] = cv2.split(np.float32(temp_squeezed_img))
 
 	testset_L_channel[i,:,:,:] = temp_squeezed_img[:,:,0]
 	a_channel[i,:,:,:] = temp_squeezed_img[:,:,1]
@@ -264,7 +258,7 @@ pred = pred.cpu()
 testset_a_b_channels = testset_a_b_channels.cpu()
 
 test_RGB = np.zeros((NumTestImages,128,128,3))
-for i in range(NumTestImages):
+for i in range(5):
 	#un-normalize L channel from [0,1] -> [0,100]
 	L_channel_squeeze = testset_L_channel[i,:,:,:]*100.0
 	#un-normalize a and b channel from [-1,1] -> [-110,110]
@@ -273,18 +267,19 @@ for i in range(NumTestImages):
 
 	test_merge = np.stack((L_channel_squeeze.numpy(),
 		a_channel.numpy(),
-		b_channel.numpy()), axis =0)*255.0
-	test_merge = np.transpose(np.uint8(test_merge[:,0,:,:]), (1,2,0))
-	# plt.show()
-	# test_BGR = cv2.cvtColor(test_merge, cv2.COLOR_LAB2BGR)
-	test_RGB[i,:,:,:] = lab2rgb(test_merge)
-	# plt.imshow(test_RGB[0,:,:,:])
-	# plt.show()
-	import pdb; pdb.set_trace()
+		b_channel.numpy()), axis = 0)
 
-	
+	import pdb; pdb.set_trace()
+	test_merge_transposed = np.transpose(test_merge[:,0,:,:], (1,2,0)) #(3,1,128,128) -> (128,128,3)
+
+	test_RGB[i,:,:,:] = lab2rgb(test_merge_transposed)
+	plt.imshow(test_RGB[i,:,:,:])
+	plt.show()
+
+
+
+
 	# test_RGB[i,:,:,:] = test_BGR.permute(2, 1, 0
 
 # for i range(NumTestImages):
 # 	plt.savefig(""test_RGB[i,:,:,:])
-
