@@ -35,11 +35,12 @@ def scale_transform(image):
 	image[2,:,:] = image[2,:,:]*rand
 	return image
 
-def show_image(image):
+def show_image(image, filename):
 	image = np.uint8(torch.squeeze(image.permute(1, 2, 0)))
 	# import pdb; pdb.set_trace()
 	imgplot = plt.imshow(image)
-	plt.show()
+	# plt.show()
+	plt.savefig(filename)
 	print("Image displayed")
 
 
@@ -258,6 +259,7 @@ pred = pred.cpu()
 testset_a_b_channels = testset_a_b_channels.cpu()
 
 test_RGB = np.zeros((NumTestImages,128,128,3))
+MSE_test = []
 for i in range(5):
 	#un-normalize L channel from [0,1] -> [0,100]
 	L_channel_squeeze = testset_L_channel[i,:,:,:]*100.0
@@ -272,15 +274,69 @@ for i in range(5):
 	test_merge_transposed = np.transpose(test_merge[:,0,:,:], (1,2,0)) #(3,1,128,128) -> (128,128,3)
 
 	test_RGB[i,:,:,:] = lab2rgb(test_merge_transposed)
+
+	pred_img = test_RGB[i,:,:,:]
+	org_img = test[i,:,:,:].numpy()
+
+	#Calculate MSE for ith test and test_RGB
 	
 	plt.imshow(test_RGB[i,:,:,:])
 	plt.savefig("Results/fig_{0}.png".format(i))
+
 	#import pdb; pdb.set_trace()
-
-
-
 
 	# test_RGB[i,:,:,:] = test_BGR.permute(2, 1, 0
 
 # for i range(NumTestImages):
 # 	plt.savefig(""test_RGB[i,:,:,:])
+
+# Plot L_channel inputs for test and train
+# plt.imshow(trainset_L_channel[0,0,:,:], cmap='gray',vmin=0,vmax=1)
+# plt.savefig("Results/fig_train_L_1.png")
+# plt.imshow(trainset_L_channel[1,0,:,:], cmap='gray',vmin=0,vmax=1)
+# plt.savefig("Results/fig_train_L_2.png")
+# plt.imshow(testset_L_channel[0,0,:,:], cmap='gray',vmin=0,vmax=1)
+# plt.savefig("Results/fig_test_L_1.png")
+# plt.imshow(testset_L_channel[1,0,:,:], cmap='gray',vmin=0,vmax=1)
+# plt.savefig("Results/fig_test_L_2.png")
+
+
+#Plot original Train and Test Images
+import pdb; pdb.set_trace()
+
+
+show_image(train[0,:,:,:], "Results/fig_train_RGB_0.png")
+show_image(train[1,:,:,:], "Results/fig_train_RGB_1.png")
+show_image(test[0,:,:,:], "Results/fig_test_RGB_0.png")
+show_image(test[1,:,:,:], "Results/fig_test_RGB_1.png")
+
+
+ColorModel.eval() #Since we have batchnorm layers
+with torch.no_grad():
+	train_preds = ColorModel(trainset_L_channel[0:2,:,:,:].cuda()).cpu()
+
+train_RGB = np.zeros((2,128,128,3))
+for i in range(2):
+	#un-normalize L channel from [0,1] -> [0,100]
+	L_channel_squeeze = trainset_L_channel[i,:,:,:]*100.0
+	#un-normalize a and b channel from [-1,1] -> [-110,110]
+	a_channel = torch.unsqueeze(train_preds[i,0,:,:], 0)*127.0
+	b_channel = torch.unsqueeze(train_preds[i,1,:,:], 0)*127.0
+
+	train_merge = np.stack((L_channel_squeeze.numpy(),
+		a_channel.numpy(),
+		b_channel.numpy()), axis = 0)
+
+	train_merge_transposed = np.transpose(train_merge[:,0,:,:], (1,2,0)) #(3,1,128,128) -> (128,128,3)
+
+	train_RGB[i,:,:,:] = lab2rgb(train_merge_transposed)
+
+
+
+# plot predicted train images
+plt.imshow(train_RGB[0,:,:,:])
+plt.savefig("Results/fig_train_pred_RGB_1.png")
+plt.imshow(train_RGB[1,:,:,:])
+plt.savefig("Results/fig_train_pred_RGB_2.png")
+
+
