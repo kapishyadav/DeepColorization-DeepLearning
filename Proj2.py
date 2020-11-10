@@ -135,7 +135,7 @@ for i in range(0, NumTrainImages*10):
 	a_b_average[i,1,:,:] = np.mean(b_channel[i,:,:,:]) #b average
 a_b_average = torch.from_numpy(a_b_average)
 
-# Linear Regressor
+# Regressor
 def train_Reg(ConvModel, optimizer, loss, L_channel, a_b_average):
 
 	tr_loss = 0
