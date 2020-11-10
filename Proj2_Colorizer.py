@@ -228,9 +228,9 @@ if loadModel==False:
 	plt.xlabel("Epochs")
 	plt.savefig("Colorizer_Loss.png")
 
-###
-#Save the model
-torch.save(ColorModel, ModelPath)
+	###
+	#Save the model
+	torch.save(ColorModel, ModelPath)
 
 #Load model
 if loadModel == True:
@@ -269,12 +269,13 @@ for i in range(5):
 		a_channel.numpy(),
 		b_channel.numpy()), axis = 0)
 
-	import pdb; pdb.set_trace()
 	test_merge_transposed = np.transpose(test_merge[:,0,:,:], (1,2,0)) #(3,1,128,128) -> (128,128,3)
 
 	test_RGB[i,:,:,:] = lab2rgb(test_merge_transposed)
+	
 	plt.imshow(test_RGB[i,:,:,:])
-	plt.show()
+	plt.savefig("Results/fig_{0}.png".format(i))
+	#import pdb; pdb.set_trace()
 
 
 
